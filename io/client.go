@@ -47,22 +47,27 @@ func (c *Client) Start() error {
 	for {
 		msg, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Println(err)
+			log.Error(err)
 			break
 		}
-		tunPort, err := strconv.Atoi(strings.TrimSpace(msg))
+		msg = strings.TrimSpace(msg)
+		if msg == "reject" {
+			log.WithField("remotePort", c.remotePort).Error("Server rejected binding")
+			return fmt.Errorf("Server rejected binding")
+		}
+		tunPort, err := strconv.Atoi(msg)
 		if err != nil {
-			fmt.Println(err)
+			log.Error(err)
 			continue
 		}
 		tunAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", c.remoteHost, tunPort))
 		if err != nil {
-			fmt.Println(err)
+			log.Error(err)
 			continue
 		}
 		appAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", c.localHost, c.appPort))
 		if err != nil {
-			fmt.Println(err)
+			log.Error(err)
 			continue
 		}
 		log.WithField("tunAddr", tunAddr).WithField("appAddr", appAddr).Debug("Tunneling")

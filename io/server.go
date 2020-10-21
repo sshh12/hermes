@@ -47,7 +47,21 @@ func (srv *Server) Start() error {
 	}
 }
 
-func (srv *Server) genPort() int {
+func (srv *Server) lockPort(port int) bool {
+	srv.portMux.Lock()
+	defer srv.portMux.Unlock()
+	if val, ok := srv.portPool[port]; ok {
+		if val {
+			srv.portPool[port] = false
+			return true
+		}
+		return false
+	}
+	srv.portPool[port] = false
+	return true
+}
+
+func (srv *Server) genAndLockPort() int {
 	srv.portMux.Lock()
 	defer srv.portMux.Unlock()
 	var port int = -1
@@ -74,13 +88,24 @@ func (srv *Server) releasePort(port int) {
 
 func (srv *Server) handleClient(clientConn net.Conn) {
 	reader := bufio.NewReader(clientConn)
+	portLocked := -1
 	for {
 		msg, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Println(err)
+			log.WithField("err", err).WithField("portLocked", portLocked).Info("Client disconnected")
+			// TODO, needs to cancel pipeIncoming
+			// if portLocked != -1 {
+			// 	srv.releasePort(portLocked)
+			// }
 			return
 		}
 		remotePort, err := strconv.Atoi(strings.TrimSpace(msg))
+		if !srv.lockPort(remotePort) {
+			log.WithField("remotePort", remotePort).Error("Client requested binding failed")
+			clientConn.Write([]byte("reject\n"))
+			return
+		}
+		portLocked = remotePort
 		log.WithField("remotePort", remotePort).Info("Client requested binding")
 		if err != nil {
 			fmt.Println(err)
@@ -92,7 +117,7 @@ func (srv *Server) handleClient(clientConn net.Conn) {
 		go (func() {
 			for {
 				inConn := <-inRemoteConns
-				port := srv.genPort()
+				port := srv.genAndLockPort()
 				log.WithField("tunnelPort", port).Debug("Serving tunnel")
 				funnelAddr := fmt.Sprintf("%s:%d", srv.host, port)
 				clientConn.Write([]byte(fmt.Sprint(port) + "\n"))
