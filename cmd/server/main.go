@@ -10,6 +10,7 @@ import (
 
 func main() {
 
+	hermesPort := flag.Int("hport", 4000, "Hermes server port")
 	logLevel := flag.String("log", "debug", "Log level")
 	flag.Parse()
 
@@ -20,7 +21,7 @@ func main() {
 	log.SetLevel(loggingLevel)
 	log.SetFormatter(&log.TextFormatter{ForceColors: true})
 
-	server, err := hio.NewServer(4000)
+	server, err := hio.NewServer(*hermesPort)
 	if err != nil {
 		log.Fatal(err)
 	}

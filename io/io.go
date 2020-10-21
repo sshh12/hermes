@@ -1,24 +1,18 @@
 package io
 
 import (
-	"fmt"
+	"context"
 	"io"
 	"net"
-	"sync"
 )
 
-func copy(from net.Conn, to net.Conn, wg *sync.WaitGroup) {
-	defer wg.Done()
-	if _, err := io.Copy(to, from); err != nil {
-		fmt.Println(err)
-		return
-	}
+func copy(ctx context.Context, cancel context.CancelFunc, conn net.Conn, conn2 net.Conn) {
+	io.Copy(conn, NewCtxReader(ctx, conn2))
+	cancel()
 }
 
 func pipe(conn net.Conn, conn2 net.Conn) {
-	wg := &sync.WaitGroup{}
-	wg.Add(2)
-	go copy(conn, conn2, wg)
-	go copy(conn2, conn, wg)
-	wg.Wait()
+	ctx, cancel := context.WithCancel(context.Background())
+	go copy(ctx, cancel, conn, conn2)
+	go copy(ctx, cancel, conn2, conn)
 }

@@ -6,6 +6,8 @@ import (
 	"net"
 	"strconv"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // Client a hermes client
@@ -35,6 +37,7 @@ func NewClient(appPort int, remotePort int, serverPort int, remoteHost string) (
 
 // Start the client
 func (c *Client) Start() error {
+	log.WithField("server", c.serverAddr).Info("Client started")
 	serverConn, err := net.DialTCP("tcp", nil, c.serverAddr)
 	if err != nil {
 		return err
@@ -48,7 +51,6 @@ func (c *Client) Start() error {
 			break
 		}
 		tunPort, err := strconv.Atoi(strings.TrimSpace(msg))
-		fmt.Println(tunPort)
 		if err != nil {
 			fmt.Println(err)
 			continue
@@ -63,6 +65,7 @@ func (c *Client) Start() error {
 			fmt.Println(err)
 			continue
 		}
+		log.WithField("tunAddr", tunAddr).WithField("appAddr", appAddr).Debug("Tunneling")
 		go pipeClientConn(tunAddr, appAddr)
 	}
 	return nil
