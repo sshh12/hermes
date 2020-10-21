@@ -112,27 +112,29 @@ func (srv *Server) handleClient(clientConn net.Conn) {
 		inRemoteConns := make(chan net.Conn, 1)
 		remoteAddr := fmt.Sprintf("%s:%d", srv.host, remotePort)
 		go funnelIncomingConns(ctx, remoteAddr, inRemoteConns)
-		go (func() {
-			waitForConns := true
-			for waitForConns {
-				select {
-				case inConn := <-inRemoteConns:
-					port := srv.genAndLockPort()
-					log.WithField("tunnelPort", port).Debug("Serving tunnel")
-					funnelAddr := fmt.Sprintf("%s:%d", srv.host, port)
-					clientConn.Write([]byte(fmt.Sprint(port) + "\n"))
-					go pipeIncoming(funnelAddr, inConn, func() {
-						srv.releasePort(port)
-					})
-				case <-ctx.Done():
-					waitForConns = false
-				}
-			}
-		})()
+		go srv.serveTunnels(ctx, clientConn, inRemoteConns)
 	}
 	cancel()
 	if portLocked != -1 {
 		srv.releasePort(portLocked)
+	}
+}
+
+func (srv *Server) serveTunnels(ctx context.Context, clientConn net.Conn, inRemoteConns chan net.Conn) {
+	waitForConns := true
+	for waitForConns {
+		select {
+		case inConn := <-inRemoteConns:
+			port := srv.genAndLockPort()
+			log.WithField("tunnelPort", port).Debug("Serving tunnel")
+			funnelAddr := fmt.Sprintf("%s:%d", srv.host, port)
+			clientConn.Write([]byte(fmt.Sprint(port) + "\n"))
+			go pipeIncoming(funnelAddr, inConn, func() {
+				srv.releasePort(port)
+			})
+		case <-ctx.Done():
+			waitForConns = false
+		}
 	}
 }
 
@@ -147,11 +149,10 @@ func funnelIncomingConns(ctx context.Context, listenAddr string, conns chan<- ne
 		for {
 			select {
 			case <-ctx.Done():
-				break
+				return
 			default:
 				conn, err := ln.Accept()
 				if err != nil {
-					log.Error(err)
 					return
 				}
 				initConns <- conn

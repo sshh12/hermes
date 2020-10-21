@@ -11,7 +11,7 @@ import (
 func main() {
 
 	hermesPort := flag.Int("hport", 4000, "Hermes server port")
-	logLevel := flag.String("log", "debug", "Log level")
+	logLevel := flag.String("log", "info", "Log level")
 	flag.Parse()
 
 	loggingLevel, err := log.ParseLevel(*logLevel)
