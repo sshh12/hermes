@@ -2,6 +2,22 @@
 
 > A simple TCP forwarder & Ngrok alternative.
 
+### Features
+
+||Hermes|Ngrok (Pro) |
+|--|--|--|
+|Protocol Support| SSH, HTTP(S), etc (anything TCP) | SSH, HTTP(S), etc (anything TCP)|
+| Pricing| ~$5/mo dependent on VPS | $8.25/mo |
+|Reserved TCP Addresses| inf* | 2 |
+|Max Connections/minute| inf* | 60|
+|Max Tunnels/Process| inf* | 12|
+|Max Online Processes| inf* | 2|
+|Pick Arbitrary Remote Port| yes| no|
+|Custom Domains| yes| yes (<=5)|
+|TLS| must be DIY| built-in|
+
+*No software restriction, although things will start to break down at some point
+
 ### Usage
 
 #### Server Setup
@@ -32,4 +48,8 @@ for example:
 $ client -port 8080 -rport 8000 -hhost 161.12.12.123
 ```
 
-This will forward all connections to `161.12.12.123:8000` to `localhost:8080` without needing to port forward on the client network.
+This will forward all connections from `161.12.12.123:8000` to `localhost:8080` without needing to port forward on the client network.
+
+### Security
+
+This has absolutely no security. Use an [encrypted TCP protocol](https://en.wikipedia.org/wiki/Transport_Layer_Security) or enforce permissions with firewall rules.
