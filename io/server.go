@@ -2,6 +2,7 @@ package io
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -89,60 +90,84 @@ func (srv *Server) releasePort(port int) {
 func (srv *Server) handleClient(clientConn net.Conn) {
 	reader := bufio.NewReader(clientConn)
 	portLocked := -1
+	ctx, cancel := context.WithCancel(context.Background())
 	for {
 		msg, err := reader.ReadString('\n')
 		if err != nil {
 			log.WithField("err", err).WithField("portLocked", portLocked).Info("Client disconnected")
-			// TODO, needs to cancel pipeIncoming
-			// if portLocked != -1 {
-			// 	srv.releasePort(portLocked)
-			// }
-			return
+			break
 		}
 		remotePort, err := strconv.Atoi(strings.TrimSpace(msg))
+		if err != nil {
+			log.Error(err)
+			break
+		}
 		if !srv.lockPort(remotePort) {
 			log.WithField("remotePort", remotePort).Error("Client requested binding failed")
 			clientConn.Write([]byte("reject\n"))
-			return
+			break
 		}
 		portLocked = remotePort
 		log.WithField("remotePort", remotePort).Info("Client requested binding")
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		inRemoteConns := make(chan net.Conn)
+		inRemoteConns := make(chan net.Conn, 1)
 		remoteAddr := fmt.Sprintf("%s:%d", srv.host, remotePort)
-		go funnelIncomingConns(remoteAddr, inRemoteConns)
+		go funnelIncomingConns(ctx, remoteAddr, inRemoteConns)
 		go (func() {
-			for {
-				inConn := <-inRemoteConns
-				port := srv.genAndLockPort()
-				log.WithField("tunnelPort", port).Debug("Serving tunnel")
-				funnelAddr := fmt.Sprintf("%s:%d", srv.host, port)
-				clientConn.Write([]byte(fmt.Sprint(port) + "\n"))
-				go pipeIncoming(funnelAddr, inConn, func() {
-					srv.releasePort(port)
-				})
+			waitForConns := true
+			for waitForConns {
+				select {
+				case inConn := <-inRemoteConns:
+					port := srv.genAndLockPort()
+					log.WithField("tunnelPort", port).Debug("Serving tunnel")
+					funnelAddr := fmt.Sprintf("%s:%d", srv.host, port)
+					clientConn.Write([]byte(fmt.Sprint(port) + "\n"))
+					go pipeIncoming(funnelAddr, inConn, func() {
+						srv.releasePort(port)
+					})
+				case <-ctx.Done():
+					waitForConns = false
+				}
 			}
 		})()
 	}
+	cancel()
+	if portLocked != -1 {
+		srv.releasePort(portLocked)
+	}
 }
 
-func funnelIncomingConns(listenAddr string, conns chan<- net.Conn) {
+func funnelIncomingConns(ctx context.Context, listenAddr string, conns chan<- net.Conn) {
 	ln, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		log.Print(err)
 		return
 	}
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.Print(err)
-			return
+	initConns := make(chan net.Conn, 0)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				break
+			default:
+				conn, err := ln.Accept()
+				if err != nil {
+					log.Error(err)
+					return
+				}
+				initConns <- conn
+			}
 		}
-		conns <- conn
+	}()
+	waitForConns := true
+	for waitForConns {
+		select {
+		case conn := <-initConns:
+			conns <- conn
+		case <-ctx.Done():
+			waitForConns = false
+		}
 	}
+	ln.Close()
 }
 
 func pipeIncoming(listenAddr string, inConn net.Conn, done func()) {

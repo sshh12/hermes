@@ -37,7 +37,11 @@ func NewClient(appPort int, remotePort int, serverPort int, remoteHost string) (
 
 // Start the client
 func (c *Client) Start() error {
-	log.WithField("server", c.serverAddr).Info("Client started")
+	log.WithFields(log.Fields{
+		"server":     c.serverAddr,
+		"remotePort": c.remotePort,
+		"appPort":    c.appPort,
+	}).Info("Client started")
 	serverConn, err := net.DialTCP("tcp", nil, c.serverAddr)
 	if err != nil {
 		return err
