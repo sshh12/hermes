@@ -10,7 +10,7 @@ jobs:
       matrix:
         goos: [windows, linux]
         goarch: [amd64]
-        cmd: [client, server]
+        cmd: [hermes, server]
     steps:
       - uses: actions/checkout@v2
       - uses: wangyoucao577/go-release-action@master

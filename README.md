@@ -43,12 +43,19 @@ $ python -m http.server 8080
 Download the latest client [release](https://github.com/sshh12/hermes/releases), then:
 
 ```
-$ client -port LOCAL_PORT -rport REMOTE_PORT -hhost SERVER_IP
-for example:
-$ client -port 8080 -rport 8000 -hhost 161.12.12.123
+$ ./hermes -hhost $SERVER_IP -save
+$ ./hermes 8080 8000
 ```
 
-This will forward all connections from `161.12.12.123:8000` to `localhost:8080` without needing to port forward on the client network.
+This will forward all connections from `$SERVER_IP:8000` to `localhost:8080` without needing to port forward on the client network.
+
+##### Multiple Tunnels
+
+```
+$ ./hermes 5000 5001 3000 3001
+```
+
+Will forward `$SERVER_IP:5001` to `localhost:5000` and `$SERVER_IP:3001` to `localhost:3000`.
 
 ### Security
 
