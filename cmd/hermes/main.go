@@ -122,5 +122,6 @@ func main() {
 	spin.Suffix = " Forwarding " + strings.Join(disp, ", ")
 	spin.Start()
 	wg.Wait()
+	spin.Stop()
 
 }
