@@ -1,10 +1,12 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"path"
 	"strconv"
@@ -18,9 +20,12 @@ import (
 )
 
 type clientConfig struct {
-	path       string
-	HermesHost string `json:"hhost"`
-	HermesPort int    `json:"hport"`
+	path                string
+	HermesHost          string `json:"host"`
+	HermesPort          int    `json:"port"`
+	HermesTLSPort       int    `json:"tls_port"`
+	UseTLS              bool   `json:"use_tls"`
+	TLSIgnoreSkipVerify bool   `json:"tls_ignore_skip_verify"`
 }
 
 func newConfig() (*clientConfig, error) {
@@ -39,6 +44,9 @@ func (cfg *clientConfig) Read() error {
 	if _, err := os.Stat(cfg.path); os.IsNotExist(err) {
 		cfg.HermesHost = "127.0.0.1"
 		cfg.HermesPort = 4000
+		cfg.HermesTLSPort = 4001
+		cfg.UseTLS = false
+		cfg.TLSIgnoreSkipVerify = false
 		return nil
 	}
 	encoded, err := ioutil.ReadFile(cfg.path)
@@ -62,6 +70,9 @@ func main() {
 	cfg.Read()
 
 	flag.IntVar(&cfg.HermesPort, "port", cfg.HermesPort, "Hermes server port")
+	flag.IntVar(&cfg.HermesTLSPort, "tls_port", cfg.HermesTLSPort, "Hermes server port")
+	flag.BoolVar(&cfg.UseTLS, "use_tls", cfg.UseTLS, "Use TLS")
+	flag.BoolVar(&cfg.TLSIgnoreSkipVerify, "tls_skip_verify", cfg.TLSIgnoreSkipVerify, "Don't attempted to verify hermes server TLS cert")
 	flag.StringVar(&cfg.HermesHost, "server", cfg.HermesHost, "Address of hermes server")
 	save := flag.Bool("save", false, "Set these settings as defaults")
 	logLevel := flag.String("log", "error", "Log level")
@@ -84,13 +95,14 @@ func main() {
 	}
 
 	if len(args) == 0 {
-		log.Fatal("No port to forward, do ./hermes <port>")
+		log.Fatal("No port to forward, do $ hermes <port>")
 		return
 	}
 
 	wg := &sync.WaitGroup{}
 	disp := make([]string, 0)
 	for i := 0; i < len(args); i += 2 {
+
 		appPort, err := strconv.Atoi(args[i])
 		if err != nil {
 			log.Fatal(err)
@@ -108,8 +120,30 @@ func main() {
 		}
 		wg.Add(1)
 		disp = append(disp, fmt.Sprintf("localhost:%d <-> %s:%d", appPort, cfg.HermesHost, remotePort))
+
+		options := make([]hio.ClientOption, 0)
+
+		if cfg.UseTLS {
+			serverTLSAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", cfg.HermesHost, cfg.HermesTLSPort))
+			if err != nil {
+				log.Fatal("Invalid server address")
+				return
+			}
+			tlsConf := &tls.Config{
+				InsecureSkipVerify: true,
+			}
+			options = append(options, hio.WithTLS(serverTLSAddr, tlsConf))
+		} else {
+			serverAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", cfg.HermesHost, cfg.HermesPort))
+			if err != nil {
+				log.Fatal("Invalid server address")
+				return
+			}
+			options = append(options, hio.WithServerAddress(serverAddr))
+		}
+
 		go func() {
-			client, err := hio.NewClient(appPort, remotePort, cfg.HermesPort, cfg.HermesHost)
+			client, err := hio.NewClient(appPort, remotePort, cfg.HermesHost, options...)
 			if err != nil {
 				log.Error(err)
 			}
@@ -118,6 +152,7 @@ func main() {
 			}
 			wg.Done()
 		}()
+
 	}
 	spin := spinner.New(spinner.CharSets[11], 100*time.Millisecond, spinner.WithWriter(os.Stderr))
 	spin.Suffix = " Forwarding " + strings.Join(disp, ", ")
