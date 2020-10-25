@@ -61,8 +61,8 @@ func main() {
 	}
 	cfg.Read()
 
-	flag.IntVar(&cfg.HermesPort, "hport", cfg.HermesPort, "Hermes server port")
-	flag.StringVar(&cfg.HermesHost, "hhost", cfg.HermesHost, "Address of hermes server")
+	flag.IntVar(&cfg.HermesPort, "port", cfg.HermesPort, "Hermes server port")
+	flag.StringVar(&cfg.HermesHost, "server", cfg.HermesHost, "Address of hermes server")
 	save := flag.Bool("save", false, "Set these settings as defaults")
 	logLevel := flag.String("log", "error", "Log level")
 	flag.Parse()
@@ -80,6 +80,7 @@ func main() {
 		if err := cfg.Write(); err != nil {
 			log.Fatal(err)
 		}
+		return
 	}
 
 	if len(args) == 0 {

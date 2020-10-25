@@ -10,7 +10,7 @@ import (
 
 func main() {
 
-	hermesPort := flag.Int("hport", 4000, "Hermes server port")
+	hermesPort := flag.Int("port", 4000, "Hermes server port")
 	logLevel := flag.String("log", "info", "Log level")
 	flag.Parse()
 
