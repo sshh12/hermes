@@ -118,7 +118,7 @@ func (srv *Server) handleClient(clientConn net.Conn, hermesListener hermesListen
 		inRemoteConns := make(chan net.Conn, 1)
 		remoteAddr := fmt.Sprintf("%s:%d", srv.host, remotePort)
 		go funnelIncomingConns(ctx, remoteAddr, inRemoteConns)
-		go srv.serveTunnels(ctx, clientConn, inRemoteConns, hermesListener)
+		go srv.serveTunnels(ctx, clientConn, msg.Token, inRemoteConns, hermesListener)
 	}
 	cancel()
 	if portLocked != -1 {
@@ -126,7 +126,7 @@ func (srv *Server) handleClient(clientConn net.Conn, hermesListener hermesListen
 	}
 }
 
-func (srv *Server) serveTunnels(ctx context.Context, clientConn net.Conn, inRemoteConns chan net.Conn, hermesListener hermesListener) {
+func (srv *Server) serveTunnels(ctx context.Context, clientConn net.Conn, clientToken []byte, inRemoteConns chan net.Conn, hermesListener hermesListener) {
 	waitForConns := true
 	for waitForConns {
 		select {
@@ -135,7 +135,7 @@ func (srv *Server) serveTunnels(ctx context.Context, clientConn net.Conn, inRemo
 			log.WithField("tunnelPort", port).Debug("Serving tunnel")
 			funnelAddr := fmt.Sprintf("%s:%d", srv.host, port)
 			writeMsg(clientConn, connRespMsg{TunnelPort: port})
-			go pipeIncoming(funnelAddr, inConn, hermesListener, func() {
+			go pipeIncoming(funnelAddr, inConn, clientToken, hermesListener, func() {
 				srv.portPool.Remove(fmt.Sprint(port))
 			})
 		case <-ctx.Done():
@@ -177,18 +177,31 @@ func funnelIncomingConns(ctx context.Context, listenAddr string, conns chan<- ne
 	ln.Close()
 }
 
-func pipeIncoming(listenAddr string, inConn net.Conn, hermesListener hermesListener, done func()) {
+func pipeIncoming(listenAddr string, inConn net.Conn, clientToken []byte, hermesListener hermesListener, done func()) {
 	ln, err := hermesListener(listenAddr)
 	if err != nil {
 		log.Print(err)
 		return
 	}
-	clientConn, err := ln.Accept()
-	if err != nil {
-		log.Print(err)
-		return
+	for {
+		clientConn, err := ln.Accept()
+		if err != nil {
+			log.Print(err)
+			continue
+		}
+		token := make([]byte, clientTokenSize)
+		n, err := clientConn.Read(token)
+		if err != nil {
+			log.Error(err)
+			continue
+		}
+		if n != clientTokenSize || !verifyToken(token, clientToken) {
+			log.Error("Client tunnel token invalid")
+			continue
+		}
+		pipe(clientConn, inConn)
+		break
 	}
-	pipe(clientConn, inConn)
 	ln.Close()
 	done()
 }

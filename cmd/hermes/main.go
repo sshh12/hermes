@@ -154,8 +154,12 @@ func main() {
 		}()
 
 	}
-	spin := spinner.New(spinner.CharSets[11], 100*time.Millisecond, spinner.WithWriter(os.Stderr))
-	spin.Suffix = " Forwarding " + strings.Join(disp, ", ")
+	spin := spinner.New(spinner.CharSets[11], 500*time.Millisecond, spinner.WithWriter(os.Stderr), spinner.WithHiddenCursor(true))
+	if cfg.UseTLS {
+		spin.Suffix = " Forwarding (🔒) " + strings.Join(disp, ", ")
+	} else {
+		spin.Suffix = " Forwarding " + strings.Join(disp, ", ")
+	}
 	spin.Start()
 	wg.Wait()
 	spin.Stop()

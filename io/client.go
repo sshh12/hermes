@@ -2,6 +2,7 @@ package io
 
 import (
 	"bufio"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,8 @@ type ClientOption func(*Client)
 
 type hermesDialer func(*net.TCPAddr) (net.Conn, error)
 
+const clientTokenSize = 256
+
 // Client a hermes client
 type Client struct {
 	appPort    int
@@ -22,15 +25,19 @@ type Client struct {
 	localHost  string
 	remoteHost string
 	remotePort int
+	token      []byte
 	tlsCfg     *tls.Config
 }
 
 // NewClient creates a client
 func NewClient(appPort int, remotePort int, remoteHost string, opts ...ClientOption) (*Client, error) {
+	token := make([]byte, clientTokenSize)
+	rand.Read(token)
 	client := &Client{
 		appPort:    appPort,
 		remoteHost: remoteHost,
 		remotePort: remotePort,
+		token:      token,
 		localHost:  "127.0.0.1",
 	}
 	for _, opt := range opts {
@@ -83,7 +90,7 @@ func (c *Client) Start() error {
 }
 
 func (c *Client) startWithConn(serverConn net.Conn, dialHermes hermesDialer) error {
-	writeMsg(serverConn, clientIntroMsg{RemotePort: c.remotePort})
+	writeMsg(serverConn, clientIntroMsg{RemotePort: c.remotePort, Token: c.token})
 	reader := bufio.NewReader(serverConn)
 	for {
 		resp, err := reader.ReadString('\n')
@@ -111,21 +118,34 @@ func (c *Client) startWithConn(serverConn net.Conn, dialHermes hermesDialer) err
 			continue
 		}
 		log.WithField("tunAddr", tunAddr).WithField("appAddr", appAddr).Debug("Tunneling")
-		go pipeClientConn(tunAddr, appAddr, dialHermes)
+		go pipeClientConn(tunAddr, appAddr, c.token, dialHermes)
 	}
 	return nil
 }
 
-func pipeClientConn(tunAddr *net.TCPAddr, appAddr *net.TCPAddr, dialHermes hermesDialer) {
+func pipeClientConn(tunAddr *net.TCPAddr, appAddr *net.TCPAddr, token []byte, dialHermes hermesDialer) {
 	connA, err := dialHermes(tunAddr)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+	connA.Write(token)
 	connB, err := net.DialTCP("tcp", nil, appAddr)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	pipe(connA, connB)
+}
+
+func verifyToken(a []byte, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

@@ -6,7 +6,8 @@ import (
 )
 
 type clientIntroMsg struct {
-	RemotePort int `json:"port"`
+	RemotePort int    `json:"port"`
+	Token      []byte `json:"token"`
 }
 
 type connRespMsg struct {
