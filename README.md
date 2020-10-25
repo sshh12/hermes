@@ -43,7 +43,7 @@ $ python -m http.server 8080
 Download the latest client [release](https://github.com/sshh12/hermes/releases), then:
 
 ```
-$ ./hermes -host $SERVER_IP -save
+$ ./hermes -server $SERVER_IP -save
 $ ./hermes 8080 8000
 ```
 
