@@ -9,6 +9,7 @@ import (
 	"net"
 	"sync"
 
+	cmap "github.com/orcaman/concurrent-map"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -23,21 +24,18 @@ type Server struct {
 	tlsPort       int
 	tlsCfg        *tls.Config
 	host          string
-	portPool      map[int]bool
+	portPool      cmap.ConcurrentMap
 	incomingConns chan net.Conn
 	portMux       sync.Mutex
 }
 
 // NewServer creates a server
 func NewServer(metaPort int, opts ...ServerOption) (*Server, error) {
-	pool := make(map[int]bool)
-	for k := 4500; k < 5000; k++ {
-		pool[k] = true
-	}
+	portPool := cmap.New()
 	server := &Server{
 		port:          metaPort,
 		host:          "0.0.0.0",
-		portPool:      pool,
+		portPool:      portPool,
 		incomingConns: make(chan net.Conn, 10),
 	}
 	for _, opt := range opts {
@@ -85,43 +83,13 @@ func (srv *Server) startWithListener(port int, errChan chan<- error, listener he
 	}
 }
 
-func (srv *Server) lockPort(port int) bool {
-	srv.portMux.Lock()
-	defer srv.portMux.Unlock()
-	if val, ok := srv.portPool[port]; ok {
-		if val {
-			srv.portPool[port] = false
-			return true
-		}
-		return false
-	}
-	srv.portPool[port] = false
-	return true
-}
-
 func (srv *Server) genAndLockPort() int {
-	srv.portMux.Lock()
-	defer srv.portMux.Unlock()
-	var port int = -1
-	for key, val := range srv.portPool {
-		if val {
-			port = key
-			break
+	for k := 4500; k < 5000; k++ {
+		if srv.portPool.SetIfAbsent(fmt.Sprint(k), true) {
+			return k
 		}
 	}
-	if port == -1 {
-		log.Fatal("ran out of ports")
-	}
-	srv.portPool[port] = false
-	log.WithField("port", port).Debug("Port locked")
-	return port
-}
-
-func (srv *Server) releasePort(port int) {
-	srv.portMux.Lock()
-	defer srv.portMux.Unlock()
-	srv.portPool[port] = true
-	log.WithField("port", port).Debug("Port released")
+	return -1
 }
 
 func (srv *Server) handleClient(clientConn net.Conn, hermesListener hermesListener) {
@@ -140,7 +108,7 @@ func (srv *Server) handleClient(clientConn net.Conn, hermesListener hermesListen
 			break
 		}
 		remotePort := msg.RemotePort
-		if !srv.lockPort(remotePort) {
+		if !srv.portPool.SetIfAbsent(fmt.Sprint(remotePort), true) {
 			log.WithField("remotePort", remotePort).Error("Client requested binding failed")
 			writeMsg(clientConn, connRespMsg{Rejection: true})
 			break
@@ -154,7 +122,7 @@ func (srv *Server) handleClient(clientConn net.Conn, hermesListener hermesListen
 	}
 	cancel()
 	if portLocked != -1 {
-		srv.releasePort(portLocked)
+		srv.portPool.Remove(fmt.Sprint(portLocked))
 	}
 }
 
@@ -168,7 +136,7 @@ func (srv *Server) serveTunnels(ctx context.Context, clientConn net.Conn, inRemo
 			funnelAddr := fmt.Sprintf("%s:%d", srv.host, port)
 			writeMsg(clientConn, connRespMsg{TunnelPort: port})
 			go pipeIncoming(funnelAddr, inConn, hermesListener, func() {
-				srv.releasePort(port)
+				srv.portPool.Remove(fmt.Sprint(port))
 			})
 		case <-ctx.Done():
 			waitForConns = false
