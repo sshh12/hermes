@@ -4,10 +4,9 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net"
-	"strconv"
-	"strings"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -130,19 +129,20 @@ func (srv *Server) handleClient(clientConn net.Conn, hermesListener hermesListen
 	portLocked := -1
 	ctx, cancel := context.WithCancel(context.Background())
 	for {
-		msg, err := reader.ReadString('\n')
+		resp, err := reader.ReadString('\n')
 		if err != nil {
-			log.WithField("err", err).WithField("portLocked", portLocked).Info("Client disconnected")
+			log.WithField("err", err).WithField("portLocked", portLocked).Info("Client connection failed")
 			break
 		}
-		remotePort, err := strconv.Atoi(strings.TrimSpace(msg))
-		if err != nil {
+		var msg clientIntroMsg
+		if err := json.Unmarshal([]byte(resp), &msg); err != nil {
 			log.Error(err)
 			break
 		}
+		remotePort := msg.RemotePort
 		if !srv.lockPort(remotePort) {
 			log.WithField("remotePort", remotePort).Error("Client requested binding failed")
-			clientConn.Write([]byte("reject\n"))
+			writeMsg(clientConn, connRespMsg{Rejection: true})
 			break
 		}
 		portLocked = remotePort
@@ -166,7 +166,7 @@ func (srv *Server) serveTunnels(ctx context.Context, clientConn net.Conn, inRemo
 			port := srv.genAndLockPort()
 			log.WithField("tunnelPort", port).Debug("Serving tunnel")
 			funnelAddr := fmt.Sprintf("%s:%d", srv.host, port)
-			clientConn.Write([]byte(fmt.Sprint(port) + "\n"))
+			writeMsg(clientConn, connRespMsg{TunnelPort: port})
 			go pipeIncoming(funnelAddr, inConn, hermesListener, func() {
 				srv.releasePort(port)
 			})

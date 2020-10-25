@@ -3,10 +3,9 @@ package io
 import (
 	"bufio"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net"
-	"strconv"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -84,25 +83,24 @@ func (c *Client) Start() error {
 }
 
 func (c *Client) startWithConn(serverConn net.Conn, dialHermes hermesDialer) error {
-	serverConn.Write([]byte(fmt.Sprintf("%d\n", c.remotePort)))
+	writeMsg(serverConn, clientIntroMsg{RemotePort: c.remotePort})
 	reader := bufio.NewReader(serverConn)
 	for {
-		msg, err := reader.ReadString('\n')
+		resp, err := reader.ReadString('\n')
 		if err != nil {
 			log.Error(err)
 			break
 		}
-		msg = strings.TrimSpace(msg)
-		if msg == "reject" {
+		var msg connRespMsg
+		if err := json.Unmarshal([]byte(resp), &msg); err != nil {
+			log.Error(err)
+			break
+		}
+		if msg.Rejection {
 			log.WithField("remotePort", c.remotePort).Error("Server rejected binding")
 			return fmt.Errorf("Server rejected binding")
 		}
-		tunPort, err := strconv.Atoi(msg)
-		if err != nil {
-			log.Error(err)
-			continue
-		}
-		tunAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", c.remoteHost, tunPort))
+		tunAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", c.remoteHost, msg.TunnelPort))
 		if err != nil {
 			log.Error(err)
 			continue
