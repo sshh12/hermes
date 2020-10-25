@@ -14,7 +14,7 @@
 |Max Online Processes| inf* | 2|
 |Pick Arbitrary Remote Port| yes| no|
 |Custom Domains| yes| yes (<=5)|
-|TLS| must be DIY| built-in|
+|TLS| yes| yes|
 
 *No software restriction, although things will start to break down at some point
 
@@ -43,7 +43,7 @@ $ python -m http.server 8080
 Download the latest client [release](https://github.com/sshh12/hermes/releases), then:
 
 ```
-$ ./hermes -hhost $SERVER_IP -save
+$ ./hermes -host $SERVER_IP -save
 $ ./hermes 8080 8000
 ```
 
@@ -57,6 +57,19 @@ $ ./hermes 5000 5001 3000 3001
 
 Will forward `$SERVER_IP:5001` to `localhost:5000` and `$SERVER_IP:3001` to `localhost:3000`.
 
-### Security
+### TLS
 
-This has absolutely no security. Use an [encrypted TCP protocol](https://en.wikipedia.org/wiki/Transport_Layer_Security) or enforce permissions with firewall rules.
+#### Server Setup
+
+```
+$ openssl ecparam -genkey -name secp384r1 -out server.key
+$ openssl req -new -x509 -sha256 -key server.key -out server.crt -days 3650
+$ ./server
+```
+
+#### Client Setup
+
+```
+$ ./hermes -use_tls -tls_skip_verify -save
+$ ./hermes 8080 8000
+```
