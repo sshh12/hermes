@@ -18,7 +18,7 @@
 
 *No software restriction, although things will start to break down at some point
 
-### Usage
+### Basic Usage
 
 #### Server Setup
 
@@ -49,15 +49,15 @@ $ ./hermes 8080 8000
 
 This will forward all connections from `$SERVER_IP:8000` to `localhost:8080` without needing to port forward on the client network.
 
-##### Multiple Tunnels
+or use this syntax for multiple tunnels:
 
 ```
 $ ./hermes 5000 5001 3000 3001
 ```
 
-Will forward `$SERVER_IP:5001` to `localhost:5000` and `$SERVER_IP:3001` to `localhost:3000`.
+This will forward `$SERVER_IP:5001` to `localhost:5000` and `$SERVER_IP:3001` to `localhost:3000`.
 
-### TLS
+### TLS Usage
 
 #### Server Setup
 
