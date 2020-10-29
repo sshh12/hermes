@@ -16,7 +16,7 @@ import (
 
 	"github.com/briandowns/spinner"
 	log "github.com/sirupsen/logrus"
-	hio "github.com/sshh12/hermes/io"
+	tcp "github.com/sshh12/hermes/tcp"
 )
 
 type clientConfig struct {
@@ -121,7 +121,7 @@ func main() {
 		wg.Add(1)
 		disp = append(disp, fmt.Sprintf("localhost:%d <-> %s:%d", appPort, cfg.HermesHost, remotePort))
 
-		options := make([]hio.ClientOption, 0)
+		options := make([]tcp.ClientOption, 0)
 
 		if cfg.UseTLS {
 			serverTLSAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", cfg.HermesHost, cfg.HermesTLSPort))
@@ -132,18 +132,18 @@ func main() {
 			tlsConf := &tls.Config{
 				InsecureSkipVerify: true,
 			}
-			options = append(options, hio.WithTLS(serverTLSAddr, tlsConf))
+			options = append(options, tcp.WithTLS(serverTLSAddr, tlsConf))
 		} else {
 			serverAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", cfg.HermesHost, cfg.HermesPort))
 			if err != nil {
 				log.Fatal("Invalid server address")
 				return
 			}
-			options = append(options, hio.WithServerAddress(serverAddr))
+			options = append(options, tcp.WithServerAddress(serverAddr))
 		}
 
 		go func() {
-			client, err := hio.NewClient(appPort, remotePort, cfg.HermesHost, options...)
+			client, err := tcp.NewClient(appPort, remotePort, cfg.HermesHost, options...)
 			if err != nil {
 				log.Error(err)
 			}

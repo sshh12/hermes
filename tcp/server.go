@@ -11,6 +11,7 @@ import (
 
 	cmap "github.com/orcaman/concurrent-map"
 	log "github.com/sirupsen/logrus"
+	hio "github.com/sshh12/hermes/io"
 )
 
 // ServerOption applies server options
@@ -102,7 +103,7 @@ func (srv *Server) handleClient(clientConn net.Conn, hermesListener hermesListen
 			log.WithField("err", err).WithField("portLocked", portLocked).Info("Client connection failed")
 			break
 		}
-		var msg clientIntroMsg
+		var msg hio.ClientIntroMsg
 		if err := json.Unmarshal([]byte(resp), &msg); err != nil {
 			log.Error(err)
 			break
@@ -110,7 +111,7 @@ func (srv *Server) handleClient(clientConn net.Conn, hermesListener hermesListen
 		remotePort := msg.RemotePort
 		if !srv.portPool.SetIfAbsent(fmt.Sprint(remotePort), true) {
 			log.WithField("remotePort", remotePort).Error("Client requested binding failed")
-			writeMsg(clientConn, connRespMsg{Rejection: true})
+			hio.WriteMsg(clientConn, hio.ConnRespMsg{Rejection: true})
 			break
 		}
 		portLocked = remotePort
@@ -134,7 +135,7 @@ func (srv *Server) serveTunnels(ctx context.Context, clientConn net.Conn, client
 			port := srv.genAndLockPort()
 			log.WithField("tunnelPort", port).Debug("Serving tunnel")
 			funnelAddr := fmt.Sprintf("%s:%d", srv.host, port)
-			writeMsg(clientConn, connRespMsg{TunnelPort: port})
+			hio.WriteMsg(clientConn, hio.ConnRespMsg{TunnelPort: port})
 			go pipeIncoming(funnelAddr, inConn, clientToken, hermesListener, func() {
 				srv.portPool.Remove(fmt.Sprint(port))
 			})
@@ -199,7 +200,7 @@ func pipeIncoming(listenAddr string, inConn net.Conn, clientToken []byte, hermes
 			log.Error("Client tunnel token invalid")
 			continue
 		}
-		pipe(clientConn, inConn)
+		hio.Pipe(clientConn, inConn)
 		break
 	}
 	ln.Close()

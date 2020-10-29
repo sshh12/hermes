@@ -5,12 +5,14 @@ import (
 	"net"
 )
 
-type clientIntroMsg struct {
+// ClientIntroMsg is passed to server when client initially connects to server
+type ClientIntroMsg struct {
 	RemotePort int    `json:"port"`
 	Token      []byte `json:"token"`
 }
 
-type connRespMsg struct {
+// ConnRespMsg is passed to client when the server has an update
+type ConnRespMsg struct {
 	Rejection  bool `json:"rejection"`
 	TunnelPort int  `json:"tunnel_port"`
 }
@@ -24,6 +26,7 @@ func encodeMsg(msg interface{}) []byte {
 	return enc
 }
 
-func writeMsg(conn net.Conn, msg interface{}) {
+// WriteMsg writes the given msg to the connection
+func WriteMsg(conn net.Conn, msg interface{}) {
 	conn.Write(encodeMsg(msg))
 }

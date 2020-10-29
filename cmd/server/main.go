@@ -6,7 +6,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	hio "github.com/sshh12/hermes/io"
+	tcp "github.com/sshh12/hermes/tcp"
 )
 
 func main() {
@@ -25,17 +25,17 @@ func main() {
 	log.SetLevel(loggingLevel)
 	log.SetFormatter(&log.TextFormatter{ForceColors: true})
 
-	options := make([]hio.ServerOption, 0)
+	options := make([]tcp.ServerOption, 0)
 
 	cer, err := tls.LoadX509KeyPair(*tlsCert, *tlsKey)
 	if err != nil {
 		log.Warning("Failed to find or load TLS certificate")
 	} else {
 		tlsCfg := &tls.Config{Certificates: []tls.Certificate{cer}}
-		options = append(options, hio.WithServerTLS(*tlsPort, tlsCfg))
+		options = append(options, tcp.WithServerTLS(*tlsPort, tlsCfg))
 	}
 
-	server, err := hio.NewServer(*port, options...)
+	server, err := tcp.NewServer(*port, options...)
 	if err != nil {
 		log.Fatal(err)
 	}

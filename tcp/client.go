@@ -9,6 +9,7 @@ import (
 	"net"
 
 	log "github.com/sirupsen/logrus"
+	hio "github.com/sshh12/hermes/io"
 )
 
 // ClientOption applies client options
@@ -90,7 +91,7 @@ func (c *Client) Start() error {
 }
 
 func (c *Client) startWithConn(serverConn net.Conn, dialHermes hermesDialer) error {
-	writeMsg(serverConn, clientIntroMsg{RemotePort: c.remotePort, Token: c.token})
+	hio.WriteMsg(serverConn, hio.ClientIntroMsg{RemotePort: c.remotePort, Token: c.token})
 	reader := bufio.NewReader(serverConn)
 	for {
 		resp, err := reader.ReadString('\n')
@@ -98,7 +99,7 @@ func (c *Client) startWithConn(serverConn net.Conn, dialHermes hermesDialer) err
 			log.Error(err)
 			break
 		}
-		var msg connRespMsg
+		var msg hio.ConnRespMsg
 		if err := json.Unmarshal([]byte(resp), &msg); err != nil {
 			log.Error(err)
 			break
@@ -135,7 +136,7 @@ func pipeClientConn(tunAddr *net.TCPAddr, appAddr *net.TCPAddr, token []byte, di
 		fmt.Println(err)
 		return
 	}
-	pipe(connA, connB)
+	hio.Pipe(connA, connB)
 }
 
 func verifyToken(a []byte, b []byte) bool {
