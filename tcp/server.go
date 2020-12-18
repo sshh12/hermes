@@ -85,7 +85,7 @@ func (srv *Server) startWithListener(port int, errChan chan<- error, listener he
 }
 
 func (srv *Server) genAndLockPort() int {
-	for k := 4500; k < 5000; k++ {
+	for k := 4500; k < 5500; k++ {
 		if srv.portPool.SetIfAbsent(fmt.Sprint(k), true) {
 			return k
 		}

@@ -28,6 +28,7 @@ type Client struct {
 	remotePort int
 	token      []byte
 	tlsCfg     *tls.Config
+	restarts   bool
 }
 
 // NewClient creates a client
@@ -40,6 +41,7 @@ func NewClient(appPort int, remotePort int, remoteHost string, opts ...ClientOpt
 		remotePort: remotePort,
 		token:      token,
 		localHost:  "127.0.0.1",
+		restarts:   false,
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -62,6 +64,20 @@ func WithTLS(addr *net.TCPAddr, tlsCfg *tls.Config) ClientOption {
 	}
 }
 
+// WithRestarts will auto restart on failure
+func WithRestarts() ClientOption {
+	return func(c *Client) {
+		c.restarts = true
+	}
+}
+
+// WithLocalHost update the local IP to forward to
+func WithLocalHost(host string) ClientOption {
+	return func(c *Client) {
+		c.localHost = host
+	}
+}
+
 // Start the client
 func (c *Client) Start() error {
 	log.WithFields(log.Fields{
@@ -69,25 +85,36 @@ func (c *Client) Start() error {
 		"remotePort": c.remotePort,
 		"appPort":    c.appPort,
 		"encrypted":  c.tlsCfg != nil,
+		"restarts":   c.restarts,
 	}).Info("Client started")
 	var serverConn net.Conn
 	var err error
 	var dialHermes hermesDialer
-	if c.tlsCfg != nil {
-		serverConn, err = tls.Dial("tcp", c.serverAddr.String(), c.tlsCfg)
-		dialHermes = func(tunAddr *net.TCPAddr) (net.Conn, error) {
-			return tls.Dial("tcp", tunAddr.String(), c.tlsCfg)
+	for {
+		if c.tlsCfg != nil {
+			serverConn, err = tls.Dial("tcp", c.serverAddr.String(), c.tlsCfg)
+			dialHermes = func(tunAddr *net.TCPAddr) (net.Conn, error) {
+				return tls.Dial("tcp", tunAddr.String(), c.tlsCfg)
+			}
+		} else {
+			serverConn, err = net.DialTCP("tcp", nil, c.serverAddr)
+			dialHermes = func(tunAddr *net.TCPAddr) (net.Conn, error) {
+				return net.DialTCP("tcp", nil, tunAddr)
+			}
 		}
-	} else {
-		serverConn, err = net.DialTCP("tcp", nil, c.serverAddr)
-		dialHermes = func(tunAddr *net.TCPAddr) (net.Conn, error) {
-			return net.DialTCP("tcp", nil, tunAddr)
+		if err != nil {
+			if !c.restarts {
+				return err
+			}
+			log.Error(err)
+		}
+		if err := c.startWithConn(serverConn, dialHermes); err != nil {
+			if !c.restarts {
+				return err
+			}
+			log.Error(err)
 		}
 	}
-	if err != nil {
-		return err
-	}
-	return c.startWithConn(serverConn, dialHermes)
 }
 
 func (c *Client) startWithConn(serverConn net.Conn, dialHermes hermesDialer) error {

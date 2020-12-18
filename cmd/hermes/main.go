@@ -69,9 +69,11 @@ func main() {
 	}
 	cfg.Read()
 
+	var noSpin bool
 	flag.IntVar(&cfg.HermesPort, "port", cfg.HermesPort, "Hermes server port")
 	flag.IntVar(&cfg.HermesTLSPort, "tls_port", cfg.HermesTLSPort, "Hermes server port")
 	flag.BoolVar(&cfg.UseTLS, "use_tls", cfg.UseTLS, "Use TLS")
+	flag.BoolVar(&noSpin, "no_spin", false, "Don't display cool spinner thing")
 	flag.BoolVar(&cfg.TLSIgnoreSkipVerify, "tls_skip_verify", cfg.TLSIgnoreSkipVerify, "Don't attempted to verify hermes server TLS cert")
 	flag.StringVar(&cfg.HermesHost, "server", cfg.HermesHost, "Address of hermes server")
 	save := flag.Bool("save", false, "Set these settings as defaults")
@@ -121,7 +123,9 @@ func main() {
 		wg.Add(1)
 		disp = append(disp, fmt.Sprintf("localhost:%d <-> %s:%d", appPort, cfg.HermesHost, remotePort))
 
-		options := make([]tcp.ClientOption, 0)
+		options := []tcp.ClientOption{
+			tcp.WithRestarts(),
+		}
 
 		if cfg.UseTLS {
 			serverTLSAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", cfg.HermesHost, cfg.HermesTLSPort))
@@ -154,14 +158,21 @@ func main() {
 		}()
 
 	}
-	spin := spinner.New(spinner.CharSets[11], 500*time.Millisecond, spinner.WithWriter(os.Stderr), spinner.WithHiddenCursor(true))
+	var displayText string
 	if cfg.UseTLS {
-		spin.Suffix = " Forwarding (🔒) " + strings.Join(disp, ", ")
+		displayText = "Forwarding (🔒) " + strings.Join(disp, ", ")
 	} else {
-		spin.Suffix = " Forwarding " + strings.Join(disp, ", ")
+		displayText = "Forwarding " + strings.Join(disp, ", ")
 	}
-	spin.Start()
-	wg.Wait()
-	spin.Stop()
+	if !noSpin {
+		spin := spinner.New(spinner.CharSets[11], 500*time.Millisecond, spinner.WithWriter(os.Stderr), spinner.WithHiddenCursor(true))
+		spin.Suffix = " " + displayText
+		spin.Start()
+		wg.Wait()
+		spin.Stop()
+	} else {
+		fmt.Println(displayText)
+		wg.Wait()
+	}
 
 }
