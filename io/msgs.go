@@ -8,13 +8,15 @@ import (
 // ClientIntroMsg is passed to server when client initially connects to server
 type ClientIntroMsg struct {
 	RemotePort int    `json:"port"`
+	Password   string `json:"password"`
 	Token      []byte `json:"token"`
 }
 
 // ConnRespMsg is passed to client when the server has an update
 type ConnRespMsg struct {
-	Rejection  bool `json:"rejection"`
-	TunnelPort int  `json:"tunnel_port"`
+	Rejection    bool   `json:"rejection"`
+	RejectionMsg string `json:"rejection_msg"`
+	TunnelPort   int    `json:"tunnel_port"`
 }
 
 func encodeMsg(msg interface{}) []byte {

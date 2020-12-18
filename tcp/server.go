@@ -17,6 +17,9 @@ import (
 // ServerOption applies server options
 type ServerOption func(*Server)
 
+// ServerAuthenticator validates a client password
+type ServerAuthenticator func(string, int, string) bool
+
 type hermesListener func(listenAddr string) (net.Listener, error)
 
 // Server a hermes server
@@ -28,6 +31,7 @@ type Server struct {
 	portPool      cmap.ConcurrentMap
 	incomingConns chan net.Conn
 	portMux       sync.Mutex
+	auth          ServerAuthenticator
 }
 
 // NewServer creates a server
@@ -38,6 +42,7 @@ func NewServer(metaPort int, opts ...ServerOption) (*Server, error) {
 		host:          "0.0.0.0",
 		portPool:      portPool,
 		incomingConns: make(chan net.Conn, 10),
+		auth:          func(pass string, port int, addr string) bool { return true },
 	}
 	for _, opt := range opts {
 		opt(server)
@@ -50,6 +55,13 @@ func WithServerTLS(port int, tlsCfg *tls.Config) ServerOption {
 	return func(srv *Server) {
 		srv.tlsPort = port
 		srv.tlsCfg = tlsCfg
+	}
+}
+
+// WithServerPassword sets server password
+func WithServerPassword(password string) ServerOption {
+	return func(srv *Server) {
+		srv.auth = func(pass string, port int, addr string) bool { return pass == password }
 	}
 }
 
@@ -108,10 +120,14 @@ func (srv *Server) handleClient(clientConn net.Conn, hermesListener hermesListen
 			log.Error(err)
 			break
 		}
+		if !srv.auth(msg.Password, msg.RemotePort, clientConn.RemoteAddr().String()) {
+			log.WithField("remoteAddr", clientConn.RemoteAddr()).Error("Client auth failed")
+			hio.WriteMsg(clientConn, hio.ConnRespMsg{Rejection: true, RejectionMsg: "Bad auth"})
+		}
 		remotePort := msg.RemotePort
 		if !srv.portPool.SetIfAbsent(fmt.Sprint(remotePort), true) {
 			log.WithField("remotePort", remotePort).Error("Client requested binding failed")
-			hio.WriteMsg(clientConn, hio.ConnRespMsg{Rejection: true})
+			hio.WriteMsg(clientConn, hio.ConnRespMsg{Rejection: true, RejectionMsg: "Bad port"})
 			break
 		}
 		portLocked = remotePort

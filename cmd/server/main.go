@@ -15,6 +15,7 @@ func main() {
 	tlsPort := flag.Int("tls_port", 4001, "Hermes TLS server port")
 	tlsCert := flag.String("tls_crt", "server.crt", "Hermes TLS .crt")
 	tlsKey := flag.String("tls_key", "server.key", "Hermes TLS .key")
+	password := flag.String("password", "", "Hermes password (empty is none)")
 	logLevel := flag.String("log", "info", "Log level")
 	flag.Parse()
 
@@ -26,6 +27,9 @@ func main() {
 	log.SetFormatter(&log.TextFormatter{ForceColors: true})
 
 	options := make([]tcp.ServerOption, 0)
+	if *password != "" {
+		options = append(options, tcp.WithServerPassword(*password))
+	}
 
 	cer, err := tls.LoadX509KeyPair(*tlsCert, *tlsKey)
 	if err != nil {

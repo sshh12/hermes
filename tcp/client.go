@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	hio "github.com/sshh12/hermes/io"
@@ -16,6 +17,9 @@ import (
 type ClientOption func(*Client)
 
 type hermesDialer func(*net.TCPAddr) (net.Conn, error)
+
+// ClientAuthenticator generates a password for a connection
+type ClientAuthenticator func(int) string
 
 const clientTokenSize = 256
 
@@ -29,6 +33,7 @@ type Client struct {
 	token      []byte
 	tlsCfg     *tls.Config
 	restarts   bool
+	auth       ClientAuthenticator
 }
 
 // NewClient creates a client
@@ -42,6 +47,7 @@ func NewClient(appPort int, remotePort int, remoteHost string, opts ...ClientOpt
 		token:      token,
 		localHost:  "127.0.0.1",
 		restarts:   false,
+		auth:       func(port int) string { return "" },
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -75,6 +81,13 @@ func WithRestarts() ClientOption {
 func WithLocalHost(host string) ClientOption {
 	return func(c *Client) {
 		c.localHost = host
+	}
+}
+
+// WithPassword sets client password
+func WithPassword(password string) ClientOption {
+	return func(c *Client) {
+		c.auth = func(port int) string { return password }
 	}
 }
 
@@ -114,11 +127,17 @@ func (c *Client) Start() error {
 			}
 			log.Error(err)
 		}
+		// prevent oof
+		time.Sleep(2 * time.Second)
 	}
 }
 
 func (c *Client) startWithConn(serverConn net.Conn, dialHermes hermesDialer) error {
-	hio.WriteMsg(serverConn, hio.ClientIntroMsg{RemotePort: c.remotePort, Token: c.token})
+	hio.WriteMsg(serverConn, hio.ClientIntroMsg{
+		RemotePort: c.remotePort,
+		Token:      c.token,
+		Password:   c.auth(c.remotePort),
+	})
 	reader := bufio.NewReader(serverConn)
 	for {
 		resp, err := reader.ReadString('\n')
@@ -133,7 +152,7 @@ func (c *Client) startWithConn(serverConn net.Conn, dialHermes hermesDialer) err
 		}
 		if msg.Rejection {
 			log.WithField("remotePort", c.remotePort).Error("Server rejected binding")
-			return fmt.Errorf("Server rejected binding")
+			return fmt.Errorf("Server rejected binding: " + msg.RejectionMsg)
 		}
 		tunAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", c.remoteHost, msg.TunnelPort))
 		if err != nil {

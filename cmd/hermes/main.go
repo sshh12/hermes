@@ -24,6 +24,7 @@ type clientConfig struct {
 	HermesHost          string `json:"host"`
 	HermesPort          int    `json:"port"`
 	HermesTLSPort       int    `json:"tls_port"`
+	ServerPassword      string `json:"password"`
 	UseTLS              bool   `json:"use_tls"`
 	TLSIgnoreSkipVerify bool   `json:"tls_ignore_skip_verify"`
 }
@@ -46,6 +47,7 @@ func (cfg *clientConfig) Read() error {
 		cfg.HermesPort = 4000
 		cfg.HermesTLSPort = 4001
 		cfg.UseTLS = false
+		cfg.ServerPassword = ""
 		cfg.TLSIgnoreSkipVerify = false
 		return nil
 	}
@@ -76,6 +78,7 @@ func main() {
 	flag.BoolVar(&noSpin, "no_spin", false, "Don't display cool spinner thing")
 	flag.BoolVar(&cfg.TLSIgnoreSkipVerify, "tls_skip_verify", cfg.TLSIgnoreSkipVerify, "Don't attempted to verify hermes server TLS cert")
 	flag.StringVar(&cfg.HermesHost, "server", cfg.HermesHost, "Address of hermes server")
+	flag.StringVar(&cfg.ServerPassword, "password", cfg.ServerPassword, "Server password")
 	save := flag.Bool("save", false, "Set these settings as defaults")
 	logLevel := flag.String("log", "error", "Log level")
 	flag.Parse()
@@ -125,6 +128,7 @@ func main() {
 
 		options := []tcp.ClientOption{
 			tcp.WithRestarts(),
+			tcp.WithPassword(cfg.ServerPassword),
 		}
 
 		if cfg.UseTLS {
